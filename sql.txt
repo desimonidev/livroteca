@@ -1,0 +1,98 @@
+-- 1. HABILITAR EXTENSÕES NECESSÁRIAS
+-- pg_trgm: para busca "parecida" (fuzzy search) nos títulos e nomes
+create extension if not exists pg_trgm;
+
+-- 2. CRIAR OS TIPOS (ENUMS)
+create type book_status as enum ('read', 'reading', 'want_to_read');
+create type moderation_status as enum ('pending', 'approved', 'rejected', 'merged');
+create type book_source as enum ('open_library', 'user_created');
+
+-- 3. CRIAR AS TABELAS
+
+-- Tabela de Autores
+create table public.authors (
+  id uuid default gen_random_uuid() primary key,
+  name text not null,
+  normalized_name text not null, -- Ex: "machado de assis"
+  bio text,
+  created_by uuid references auth.users(id) on delete set null,
+  status moderation_status default 'pending',
+  merged_into_id uuid references public.authors(id) on delete set null,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+-- Tabela de Livros
+create table public.books (
+  id uuid default gen_random_uuid() primary key,
+  title text not null,
+  normalized_title text not null, -- Ex: "dom casmurro"
+  author_id uuid references public.authors(id) on delete restrict not null,
+  isbn text,
+  open_library_key text unique, -- Ex: "/works/OL27448W"
+  cover_url text,
+  description text,
+  source book_source default 'user_created',
+  created_by uuid references auth.users(id) on delete set null,
+  status moderation_status default 'pending',
+  merged_into_id uuid references public.books(id) on delete set null,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+-- Tabela da Estante do Usuário
+create table public.user_books (
+  id uuid default gen_random_uuid() primary key,
+  user_id uuid references auth.users(id) on delete cascade not null,
+  book_id uuid references public.books(id) on delete cascade not null,
+  status book_status not null,
+  rating integer check (rating >= 1 and rating <= 5),
+  review text,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  updated_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  -- Um usuário só pode ter um registro por livro
+  unique(user_id, book_id) 
+);
+
+-- Tabela de Seguidores (Rede Social)
+create table public.follows (
+  follower_id uuid references auth.users(id) on delete cascade not null,
+  following_id uuid references auth.users(id) on delete cascade not null,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  primary key (follower_id, following_id),
+  -- Não pode seguir a si mesmo
+  check (follower_id <> following_id)
+);
+
+-- 4. CRIAR ÍNDICES PARA PERFORMANCE E BUSCA
+-- Índices para evitar duplicatas exatas
+create unique index idx_authors_normalized_name on public.authors (normalized_name) where status = 'approved';
+create unique index idx_books_normalized_title_author on public.books (normalized_title, author_id) where status = 'approved';
+
+-- Índices GIN para busca por similaridade (busca "aproximada")
+create index idx_authors_name_trgm on public.authors using gin (normalized_name gin_trgm_ops);
+create index idx_books_title_trgm on public.books using gin (normalized_title gin_trgm_ops);
+
+-- 5. HABILITAR ROW LEVEL SECURITY (RLS)
+-- Isso é CRUCIAL. Sem isso, qualquer um pode ler/apagar tudo.
+alter table public.authors enable row level security;
+alter table public.books enable row level security;
+alter table public.user_books enable row level security;
+alter table public.follows enable row level security;
+
+-- 6. CRIAR AS POLÍTICAS DE SEGURANÇA (POLICIES)
+
+-- AUTHORS: Todos podem ler os aprovados. Usuários logados podem criar (pendentes). Criador ou admin pode editar.
+create policy "Autores aprovados são visíveis para todos" on public.authors for select using (status = 'approved' or auth.uid() = created_by);
+create policy "Usuários logados podem sugerir autores" on public.authors for insert with check (auth.role() = 'authenticated');
+create policy "Criadores podem editar seus autores pendentes" on public.authors for update using (auth.uid() = created_by and status = 'pending');
+
+-- BOOKS: Todos podem ler os aprovados. Usuários logados podem criar (pendentes). Criador ou admin pode editar.
+create policy "Livros aprovados são visíveis para todos" on public.books for select using (status = 'approved' or auth.uid() = created_by);
+create policy "Usuários logados podem sugerir livros" on public.books for insert with check (auth.role() = 'authenticated');
+create policy "Criadores podem editar seus livros pendentes" on public.books for update using (auth.uid() = created_by and status = 'pending');
+
+-- USER_BOOKS: Usuário só vê e mexe na própria estante (por enquanto).
+create policy "Usuários gerenciam sua própria estante" on public.user_books for all using (auth.uid() = user_id);
+
+-- FOLLOWS: Qualquer um pode ver quem segue quem. Usuário só gerencia seus próprios follows.
+create policy "Seguidores são visíveis para todos" on public.follows for select using (true);
+create policy "Usuários gerenciam seus próprios follows" on public.follows for all using (auth.uid() = follower_id);
