@@ -1,6 +1,8 @@
+// src/app/components/UserProfile.tsx
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { connection } from 'next/server'
+import Link from 'next/link' // <-- Importar o Link
 
 export async function UserProfile() {
     await connection()
@@ -12,23 +14,20 @@ export async function UserProfile() {
         redirect('/login')
     }
 
-    // Pega a primeira letra do email para o avatar
     const initial = user.email?.charAt(0).toUpperCase()
 
     return (
         <div className="flex items-center gap-4">
-            {/* Info do Usuário (Oculto no celular para não quebrar o layout) */}
-            <div className="hidden md:flex flex-col items-end">
-                <span className="text-sm font-medium text-zinc-300">{user.email}</span>
-                <span className="text-xs text-zinc-500">Leitor</span>
-            </div>
+            {/* Transformamos a área do nome e avatar em um link para o perfil */}
+            <Link href={`/usuarios/${user.id}`} className="hidden md:flex flex-col items-end group">
+                <span className="text-sm font-medium text-zinc-300 group-hover:text-white transition-colors">{user.email}</span>
+                <span className="text-xs text-zinc-500">Ver meu perfil</span>
+            </Link>
 
-            {/* Avatar Gerado */}
-            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center font-bold text-white shadow-lg shadow-blue-500/20">
+            <Link href={`/usuarios/${user.id}`} className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center font-bold text-white shadow-lg shadow-blue-500/20 hover:scale-105 transition-transform cursor-pointer">
                 {initial}
-            </div>
+            </Link>
 
-            {/* Botão de Sair Minimalista */}
             <form action={async () => {
                 'use server'
                 const supabase = await createClient()

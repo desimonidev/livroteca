@@ -8,6 +8,7 @@ import Link from 'next/link'
 export default function Cadastro() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [fullName, setFullName] = useState('') // Novo estado para o nome
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [success, setSuccess] = useState(false)
@@ -19,18 +20,32 @@ export default function Cadastro() {
     setLoading(true)
     setError(null)
 
-    const { error } = await supabase.auth.signUp({
+    // 1. Cria o usuário no Supabase Auth com o Nome nos metadados
+    const { data: authData, error: authError } = await supabase.auth.signUp({
       email,
       password,
+      options: {
+        data: {
+          full_name: fullName,
+        },
+      },
     })
 
-    if (error) {
-      setError(error.message)
-    } else {
-      setSuccess(true)
-      // Se você desativou a confirmação de email no Supabase, pode redirecionar direto:
-      // router.push('/')
+    if (authError) {
+      setError(authError.message)
+      setLoading(false)
+      return
     }
+
+    // 2. Atualiza a tabela de perfis (caso o gatilho do banco já tenha criado a linha)
+    if (authData.user) {
+      await supabase
+        .from('profiles')
+        .update({ full_name: fullName })
+        .eq('id', authData.user.id)
+    }
+
+    setSuccess(true)
     setLoading(false)
   }
 
@@ -60,8 +75,22 @@ export default function Cadastro() {
       <div className="relative z-10 w-full max-w-md p-8 space-y-6 bg-white/10 backdrop-blur-xl border border-white/20 rounded-2xl shadow-2xl">
         <h1 className="text-2xl font-bold text-center text-white tracking-wide">Crie sua conta</h1>
         <p className="text-center text-sm text-gray-300">Comece a organizar suas leituras hoje</p>
-        
+
         <form onSubmit={handleCadastro} className="space-y-4">
+          
+          {/* CAMPO DE NOME ADICIONADO AQUI */}
+          <div>
+            <label className="block text-sm font-medium text-gray-200">Nome Completo</label>
+            <input
+              type="text"
+              value={fullName}
+              onChange={(e) => setFullName(e.target.value)}
+              required
+              className="w-full px-4 py-2 mt-1 bg-black/20 border border-white/10 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+              placeholder="Como quer ser chamado?"
+            />
+          </div>
+
           <div>
             <label className="block text-sm font-medium text-gray-200">E-mail</label>
             <input
