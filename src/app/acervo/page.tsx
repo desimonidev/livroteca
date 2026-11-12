@@ -1,4 +1,3 @@
-// src/app/acervo/page.tsx
 import Link from 'next/link'
 import { Suspense } from 'react'
 import { BookList } from './BookList'
@@ -20,6 +19,12 @@ export default function Acervo() {
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
           </svg>
           Cadastrar Livro
+        </Link>
+        <Link
+          href="/acervo/buscar"
+          className="bg-zinc-800 hover:bg-zinc-700 text-white px-6 py-3 rounded-xl font-medium transition-colors w-fit border border-zinc-700"
+        >
+          Buscar livro
         </Link>
       </div>
 

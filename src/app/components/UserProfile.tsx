@@ -11,7 +11,7 @@ export async function UserProfile() {
     const { data: { user } } = await supabase.auth.getUser()
 
     if (!user) {
-        redirect('/login')
+        return null
     }
 
     const initial = user.email?.charAt(0).toUpperCase()
